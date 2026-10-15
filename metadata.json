@@ -1,0 +1,6 @@
+{
+  "name": "JajanBuah - Fruit Operations & Fulfillment Management",
+  "description": "Sistem manajemen operasional penimbangan buah segar, alokasi kapasitas packer gudang, kanban fulfillment, dan monitor TV gudang realtime.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
