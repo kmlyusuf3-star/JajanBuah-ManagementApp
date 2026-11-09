@@ -154,9 +154,29 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 // POST /api/auth/register-google (Employee Registration via Google Identity)
 app.post('/api/auth/register-google', (req: Request, res: Response) => {
   const { name, email, phone, requestedRole, shift, password, avatar } = req.body;
-  if (!name || !email) {
-    return res.status(400).json({ error: 'Nama lengkap dan email Google/Gmail wajib diisi.' });
-  }
+if (
+  typeof name !== 'string' ||
+  !name.trim() ||
+  name.trim().length > 100 ||
+  typeof email !== 'string' ||
+  !email.trim()
+) {
+  return res.status(400).json({
+    error: 'Nama lengkap dan email wajib diisi dengan benar.',
+  });
+}
+
+const allowedRoles = ['admin_order', 'packer', 'tv'];
+const cleanRequestedRole =
+  typeof requestedRole === 'string'
+    ? requestedRole.trim().toLowerCase()
+    : 'admin_order';
+
+if (!allowedRoles.includes(cleanRequestedRole)) {
+  return res.status(400).json({
+    error: 'Role pendaftaran tidak valid.',
+  });
+}
 
   const cleanEmail = String(email).trim().toLowerCase();
   const baseUsername = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '');
@@ -180,7 +200,13 @@ app.post('/api/auth/register-google', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email atau username ini sudah terdaftar sebagai pengguna aktif. Silakan masuk menggunakan formulir login.' });
   }
 
-  const passToHash = password && String(password).trim() ? String(password).trim() : 'JajanBuah2026!';
+  if (typeof password !== 'string' || password.trim().length < 12) {
+    return res.status(400).json({
+      error: 'Kata sandi wajib diisi dan minimal 12 karakter.',
+    });
+  }
+
+  const passToHash = password;
   const creds = hashPassword(passToHash);
   const id = `usr-reg-${Date.now()}`;
   const now = new Date().toISOString();
@@ -196,12 +222,12 @@ app.post('/api/auth/register-google', (req: Request, res: Response) => {
     cleanEmail,
     creds.hash,
     creds.salt,
-    requestedRole || 'admin_order',
+    cleanRequestedRole,
     shift || 'Shift Pagi (06:00 - 15:00 WIB)',
     'menunggu_persetujuan',
     defaultAvatar,
     phone || '',
-    requestedRole || 'admin_order',
+    cleanRequestedRole,
     now,
     'Belum pernah login'
   );
@@ -210,14 +236,13 @@ app.post('/api/auth/register-google', (req: Request, res: Response) => {
     String(name).trim(),
     'Calon Karyawan',
     'Pendaftaran Akun Baru',
-    `Pengajuan akun baru oleh ${name} (${cleanEmail}) untuk posisi ${(requestedRole || 'admin_order').toUpperCase()}`,
-    'user',
+    `Pengajuan akun baru oleh ${name} (${cleanEmail}) untuk posisi ${cleanRequestedRole.toUpperCase()}`,    'user',
     req.ip || '127.0.0.1'
   );
 
   createNotification(
     'Pengajuan Akun Baru',
-    `${name} mengajukan akun baru sebagai ${(requestedRole || 'admin_order').toUpperCase()}. Butuh persetujuan Super Admin.`,
+    `${name} mengajukan akun baru sebagai ${cleanRequestedRole.toUpperCase()}. Butuh persetujuan Super Admin.`,
     'user',
     undefined,
     'super_admin'
@@ -231,7 +256,7 @@ app.post('/api/auth/register-google', (req: Request, res: Response) => {
       name,
       email: cleanEmail,
       phone,
-      requestedRole: requestedRole || 'admin_order',
+      requestedRole: cleanRequestedRole,
       shift: shift || 'Shift Pagi (06:00 - 15:00 WIB)',
       createdAt: now,
       status: 'menunggu_persetujuan',
@@ -241,24 +266,33 @@ app.post('/api/auth/register-google', (req: Request, res: Response) => {
 
 // GET /api/auth/registration-status
 app.get('/api/auth/registration-status', (req: Request, res: Response) => {
-  const email = req.query.email as string;
-  if (!email) return res.status(400).json({ error: 'Email wajib disertakan.' });
-  const cleanEmail = String(email).trim().toLowerCase();
-  const user = db.prepare('SELECT id, name, email, role, requested_role, status, shift, created_at FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?').get(cleanEmail, cleanEmail) as any;
+  const email = req.query.email;
+
+  if (typeof email !== 'string' || !email.trim() || email.length > 254) {
+    return res.status(400).json({ error: 'Email tidak valid.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  const user = db.prepare(`
+    SELECT status, requested_role, role
+    FROM users
+    WHERE LOWER(email) = ? OR LOWER(username) = ?
+  `).get(cleanEmail, cleanEmail) as {
+    status: string;
+    requested_role: string | null;
+    role: string;
+  } | undefined;
+
   if (!user) {
     return res.json({ exists: false });
   }
+
   return res.json({
     exists: true,
     user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      requestedRole: user.requested_role || user.role,
       status: user.status,
-      shift: user.shift,
-      createdAt: user.created_at,
+      requestedRole: user.requested_role || user.role,
     },
   });
 });
@@ -342,7 +376,7 @@ app.get('/api/users', (req: Request, res: Response) => {
   const rows = db.prepare(`
     SELECT id, username, name, email, role, shift, status, avatar, phone, requested_role, created_at, last_login
     FROM users
-    ORDER BY 
+    ORDER BY
       CASE WHEN status = 'menunggu_persetujuan' THEN 0 ELSE 1 END,
       CASE WHEN role = 'super_admin' THEN 0 ELSE 1 END,
       rowid ASC
@@ -366,20 +400,34 @@ app.get('/api/users', (req: Request, res: Response) => {
   return res.json({ users });
 });
 
+// --- MULAI TAMBAHAN KODE KEAMANAN ---
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth')) return next();
+
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Akses Ditolak: Anda belum login.' });
+  }
+  next();
+});
 /* ==========================================================================
    NOTIFICATIONS ENDPOINTS (ALL ROLES)
    ========================================================================== */
 app.get('/api/notifications', (req: Request, res: Response) => {
   const user = getAuthenticatedUser(req);
-  const userRole = user?.role || 'all';
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const rows = db.prepare(`
-    SELECT id, title, message, timestamp, type, is_read, order_id, role_target, created_at
+    SELECT id, title, message, timestamp, type, is_read, order_id,
+           role_target, created_at
     FROM notifications
     WHERE role_target = 'all' OR role_target = ?
     ORDER BY created_at DESC
     LIMIT 50
-  `).all(userRole) as any[];
+  `).all(user.role) as any[];
 
   const notifications = rows.map((r) => ({
     id: r.id,
@@ -393,6 +441,45 @@ app.get('/api/notifications', (req: Request, res: Response) => {
   }));
 
   return res.json({ notifications });
+});
+
+app.patch('/api/notifications/:id/read', (req: Request, res: Response) => {
+  const user = getAuthenticatedUser(req);
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { id } = req.params;
+
+  const result = db.prepare(`
+    UPDATE notifications
+    SET is_read = 1
+    WHERE id = ?
+      AND (role_target = 'all' OR role_target = ?)
+  `).run(id, user.role);
+
+  if (!result.changes) {
+    return res.status(404).json({ error: 'Notification not found' });
+  }
+
+  return res.json({ success: true });
+});
+
+app.post('/api/notifications/mark-all-read', (req: Request, res: Response) => {
+  const user = getAuthenticatedUser(req);
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  db.prepare(`
+    UPDATE notifications
+    SET is_read = 1
+    WHERE role_target = 'all' OR role_target = ?
+  `).run(user.role);
+
+  return res.json({ success: true });
 });
 
 app.patch('/api/notifications/:id/read', (req: Request, res: Response) => {
@@ -441,6 +528,14 @@ app.get('/api/products', (_req: Request, res: Response) => {
 
 // POST /api/products
 app.post('/api/products', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk menambahkan produk.',
+    });
+  }
+
   const p = req.body;
   if (!p.name || !p.pricePerKg) {
     return res.status(400).json({ error: 'Nama produk dan harga wajib diisi.' });
@@ -481,7 +576,6 @@ app.post('/api/products', (req: Request, res: Response) => {
     createdAt
   );
 
-  const actor = getAuthenticatedUser(req);
   const isBundle = Boolean(p.isBundle);
   recordActivity(
     actor ? actor.name : 'Admin',
@@ -510,6 +604,14 @@ app.post('/api/products', (req: Request, res: Response) => {
 
 // PUT /api/products/:id
 app.put('/api/products/:id', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk mengubah produk.',
+    });
+  }
+
   const { id } = req.params;
   const p = req.body;
   const isBundleVal = p.isBundle ? 1 : 0;
@@ -543,7 +645,7 @@ app.put('/api/products/:id', (req: Request, res: Response) => {
     id
   );
 
-  const actor = getAuthenticatedUser(req);
+
   recordActivity(
     actor ? actor.name : 'Admin',
     actor ? actor.role : 'admin_order',
@@ -558,6 +660,14 @@ app.put('/api/products/:id', (req: Request, res: Response) => {
 
 // PATCH /api/products/:id/toggle
 app.patch('/api/products/:id/toggle', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk mengubah status produk.',
+    });
+  }
+
   const { id } = req.params;
   const current = db.prepare('SELECT is_active, name FROM products WHERE id = ?').get(id) as any;
   if (!current) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
@@ -565,7 +675,6 @@ app.patch('/api/products/:id/toggle', (req: Request, res: Response) => {
   const nextState = current.is_active ? 0 : 1;
   db.prepare('UPDATE products SET is_active = ? WHERE id = ?').run(nextState, id);
 
-  const actor = getAuthenticatedUser(req);
   recordActivity(
     actor ? actor.name : 'Admin',
     actor ? actor.role : 'admin_order',
@@ -580,11 +689,18 @@ app.patch('/api/products/:id/toggle', (req: Request, res: Response) => {
 
 // DELETE /api/products/:id
 app.delete('/api/products/:id', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk menghapus produk.',
+    });
+  }
+
   const { id } = req.params;
   const current = db.prepare('SELECT name FROM products WHERE id = ?').get(id) as any;
   db.prepare('DELETE FROM products WHERE id = ?').run(id);
 
-  const actor = getAuthenticatedUser(req);
   recordActivity(
     actor ? actor.name : 'Admin',
     actor ? actor.role : 'admin_order',
@@ -634,9 +750,18 @@ function parseOrderRow(r: any) {
 }
 
 // GET /api/orders
-app.get('/api/orders', (_req: Request, res: Response) => {
+app.get('/api/orders', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk melihat daftar pesanan.',
+    });
+  }
+
   const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
   const orders = rows.map(parseOrderRow);
+
   return res.json({ orders });
 });
 
@@ -715,10 +840,20 @@ app.post('/api/orders', (req: Request, res: Response) => {
   return res.json({ success: true, order: parseOrderRow(inserted) });
 });
 
+
 // PUT /api/orders/:id
 app.put('/api/orders/:id', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk mengubah pesanan.',
+    });
+  }
+
   const { id } = req.params;
   const o = req.body;
+
 
   db.prepare(`
     UPDATE orders SET
@@ -736,7 +871,7 @@ app.put('/api/orders/:id', (req: Request, res: Response) => {
     id
   );
 
-  const actor = getAuthenticatedUser(req);
+
   recordActivity(
     actor ? actor.name : 'Admin',
     actor ? actor.role : 'admin_order',
@@ -752,6 +887,14 @@ app.put('/api/orders/:id', (req: Request, res: Response) => {
 
 // PATCH /api/orders/:id/status
 app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk mengubah status pesanan.',
+    });
+  }
+
   const { id } = req.params;
   const { status, note } = req.body;
   if (!status) return res.status(400).json({ error: 'Status baru wajib disertakan.' });
@@ -760,7 +903,6 @@ app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
   if (!current) return res.status(404).json({ error: 'Order tidak ditemukan.' });
 
   const timestamp = `${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`;
-  const actor = getAuthenticatedUser(req);
   const actorName = actor ? actor.name : 'Admin';
 
   const history = JSON.parse(current.status_history_json || '[]');
@@ -854,6 +996,14 @@ app.patch('/api/orders/:id/payment-proof', (req: Request, res: Response) => {
 
 // PATCH /api/orders/:id/item-weight
 app.patch('/api/orders/:id/item-weight', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order', 'packer'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk memperbarui berat buah.',
+    });
+  }
+
   const { id } = req.params;
   const { itemId, actualWeightKg } = req.body;
 
@@ -875,11 +1025,18 @@ app.patch('/api/orders/:id/item-weight', (req: Request, res: Response) => {
 
 // DELETE /api/orders/:id
 app.delete('/api/orders/:id', (req: Request, res: Response) => {
+  const actor = getAuthenticatedUser(req);
+
+  if (!actor || !['super_admin', 'admin_order'].includes(actor.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk menghapus pesanan.',
+    });
+  }
+
   const { id } = req.params;
   const current = db.prepare('SELECT customer_name FROM orders WHERE id = ?').get(id) as any;
   db.prepare('DELETE FROM orders WHERE id = ?').run(id);
 
-  const actor = getAuthenticatedUser(req);
   recordActivity(
     actor ? actor.name : 'Admin',
     actor ? actor.role : 'admin_order',
@@ -985,6 +1142,14 @@ app.get('/api/price-history', (_req: Request, res: Response) => {
 
 // POST /api/price-history
 app.post('/api/price-history', (req: Request, res: Response) => {
+  const user = getAuthenticatedUser(req);
+
+  if (!user || !['super_admin', 'admin_order'].includes(user.role)) {
+    return res.status(403).json({
+      error: 'Akses ditolak: Anda tidak memiliki izin untuk mengubah harga produk.',
+    });
+  }
+
   const { productId, newPrice, unit, reason } = req.body;
   if (!productId || !newPrice || !reason) {
     return res.status(400).json({ error: 'Produk, harga baru, dan alasan perubahan wajib diisi.' });
@@ -994,7 +1159,6 @@ app.post('/api/price-history', (req: Request, res: Response) => {
   if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
 
   const oldPrice = prod.price_per_kg;
-  const user = getAuthenticatedUser(req);
   const userRoleLabel = user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'admin_order' ? 'Order Admin' : 'Admin';
   const changedBy = user ? `${user.name} (${userRoleLabel})` : 'Admin';
   const timestamp = `${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`;
