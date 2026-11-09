@@ -2,12 +2,41 @@ node_modules/
 build/
 dist/
 coverage/
+.vite/
+.cache/
+.turbo/
+.vercel/
+playwright-report/
+test-results/
 .DS_Store
+Thumbs.db
 *.log
+*.tsbuildinfo
+*.tmp
+*.bak
+*.backup
+*.broken-backup
 .env*
 !.env.example
 
+# Local data and database files
 data/
+uploads/
+backups/
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+
+# Credentials, certificates, and local tokens
+.secrets/
+credentials.json
+service-account*.json
+token.json
+*.pem
+*.key
+*.p12
+*.pfx
