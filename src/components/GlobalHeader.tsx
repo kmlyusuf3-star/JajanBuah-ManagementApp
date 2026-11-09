@@ -236,7 +236,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Cari universal: #ID Order, Customer, Komoditas Buah..."
+                placeholder="Cari : ID Order, Customer, Komoditas Buah..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="w-full pl-10 pr-10 py-2 rounded-full text-xs bg-slate-200/60 dark:bg-slate-800/90 border border-slate-300/80 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-800 dark:focus:ring-white transition-all shadow-inner"
@@ -269,31 +269,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </button>
 
             {/* Sesuai revisi: Link Pesanan (Bagi Link Form) DIHAPUS pada interface Packer */}
-            {!isPacker && onOpenShareLink && (
-              <button
-                type="button"
-                onClick={onOpenShareLink}
-                className="inline-flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 transition-colors shadow-2xs shrink-0 cursor-pointer"
-                title="Bagikan Link Formulir Pesanan ke Pelanggan"
-              >
-                <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden md:inline">Bagi Link Form</span>
-                <span className="md:hidden text-[10px]">Link</span>
-              </button>
-            )}
-
-            {/* Quick Add (+) Button - Hanya untuk Super Admin & Order Admin */}
-            {(isSuperAdmin || isOrderAdmin) && (
-              <button
-                type="button"
-                onClick={onQuickAddOrder}
-                className="inline-flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
-                title="Buat Order Baru"
-              >
-                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Order Baru</span>
-              </button>
-            )}
+            
 
             {/* Dark Mode Toggle */}
             <button
