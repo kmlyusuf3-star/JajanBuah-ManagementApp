@@ -28,18 +28,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'h
 
   return (
     <>
-      {variant === 'header' && (
-        <button
-          type="button"
-          onClick={handleAction}
-          className="inline-flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-transform active:scale-95 shrink-0 cursor-pointer"
-          title="Pasang Pintasan Aplikasi di Ponsel / Chrome"
-        >
-          <Smartphone className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">Pintasan App</span>
-          <span className="sm:hidden text-[10px]">App</span>
-        </button>
-      )}
+
 
       {variant === 'sidebar' && (
         <button

@@ -217,6 +217,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
       {/* Stage Navigation Pills with Smooth Scroll */}
       <div className="flex items-center space-x-1.5 sm:space-x-2 overflow-x-auto pb-1 pt-0.5 scrollbar-none w-full max-w-full -mx-1 px-1">
+        {/* flex item-center adalah untuk menyelaraskan item di dalam flex container
+        space-x-1.5 sm:space-x-2 adalah untuk memberikan jarak antar item pada tampilan kecil dan besar
+       overflow-x-auto adalah untuk memungkinkan scroll horizontal jika item melebihi lebar container */}
         <button
           type="button"
           onClick={() => setActiveTab('all')}
