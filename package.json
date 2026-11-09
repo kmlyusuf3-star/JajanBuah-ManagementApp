@@ -3,14 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "start": "node --experimental-strip-types server.ts",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
-  },
+"scripts": {
+  "dev": "tsx server.ts",
+  "build": "vite build && esbuild server.ts --bundle --platform=node --target=node20 --packages=external --outfile=dist/server.cjs",
+  "start": "node dist/server.cjs",
+  "preview": "vite preview",
+  "clean": "rm -rf dist server.cjs server.js",
+  "lint": "tsc --noEmit"
+},
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
