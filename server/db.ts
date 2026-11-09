@@ -527,3 +527,7 @@ export function seedInitialData() {
 
 // Run initial seed on load
 seedInitialData();
+
+
+db.exec("DELETE FROM packers WHERE name IN ('Budi Santoso', 'Rian Hidayat', 'Dimas Permana');");
+db.exec("DELETE FROM users WHERE name IN ('Budi Santoso', 'Rian Hidayat', 'Dimas Permana');");
